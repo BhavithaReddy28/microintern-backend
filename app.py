@@ -185,6 +185,17 @@ def home():
     conn.close()
     return f"Backend is running! Total applications in DB: {count}"
 
+@app.route("/debug/test-smtp")
+def debug_test_smtp():
+    try:
+        import smtplib
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+        return jsonify({"status": "SMTP connection & login succeeded!"})
+    except Exception as e:
+        return jsonify({"status": "Failed", "error": str(e)})
+
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
