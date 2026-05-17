@@ -294,8 +294,7 @@ def forgot_password():
             send_reset_password_email(email, token)
             return jsonify({"message": "Password reset email sent"}), 200
         else:
-            # We return 200 anyway for security (don't leak which emails exist)
-            return jsonify({"message": "If an account exists with this email, a reset link has been sent"}), 200
+            return jsonify({"message": "Email is not registered on the platform"}), 404
     except Exception as e:
         conn.rollback()
         return jsonify({"message": "Failed to process request", "error": str(e)}), 500
