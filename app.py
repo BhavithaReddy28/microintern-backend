@@ -174,6 +174,41 @@ def home():
     conn.close()
     return f"Backend is running! Total applications in DB: {count}"
 
+@app.route("/debug/brevo-status")
+def debug_brevo_status():
+    email = request.args.get("email", "bl.en.u4cse23255@bl.students.amrita.edu")
+    key_status = "Loaded successfully!" if BREVO_API_KEY else "Not found/Empty"
+    
+    api_response = None
+    if BREVO_API_KEY:
+        try:
+            import requests
+            url = "https://api.brevo.com/v3/smtp/email"
+            headers = {
+                "accept": "application/json",
+                "api-key": BREVO_API_KEY,
+                "content-type": "application/json"
+            }
+            payload = {
+                "sender": {"email": SMTP_USER, "name": "MicroIntern Team"},
+                "to": [{"email": email}],
+                "subject": "Diagnostic Brevo Test",
+                "htmlContent": "If you are reading this, your Brevo integration is working perfectly!"
+            }
+            response = requests.post(url, headers=headers, json=payload, timeout=5)
+            api_response = {
+                "status_code": response.status_code,
+                "response_text": response.json() if response.status_code in [200, 201, 202] else response.text
+            }
+        except Exception as e:
+            api_response = {"error": str(e)}
+            
+    return jsonify({
+        "BREVO_API_KEY_status": key_status,
+        "SMTP_USER_configured": SMTP_USER,
+        "api_response": api_response
+    })
+
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
