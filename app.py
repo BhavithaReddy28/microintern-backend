@@ -36,8 +36,7 @@ def upload_file():
     filename = secure_filename(file.filename)
     filename = f"{int(time.time())}_{filename}"
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-    
-    file_url = f"http://127.0.0.1:5001/uploads/{filename}"
+    file_url = f"{request.host_url}uploads/{filename}"
     return jsonify({"url": file_url})
 
 # Razorpay Configuration
