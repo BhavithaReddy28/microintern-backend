@@ -69,6 +69,7 @@ def init_admin():
         conn.close()
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", SMTP_USER)
 
 def send_email(to_email, subject, body_text):
     # Try sending via Brevo API if key is available
@@ -82,7 +83,7 @@ def send_email(to_email, subject, body_text):
                 "content-type": "application/json"
             }
             payload = {
-                "sender": {"email": SMTP_USER, "name": "MicroIntern Team"},
+                "sender": {"email": SENDER_EMAIL, "name": "MicroIntern Team"},
                 "to": [{"email": to_email}],
                 "subject": subject,
                 "htmlContent": body_text.replace("\n", "<br>")
@@ -190,7 +191,7 @@ def debug_brevo_status():
                 "content-type": "application/json"
             }
             payload = {
-                "sender": {"email": SMTP_USER, "name": "MicroIntern Team"},
+                "sender": {"email": SENDER_EMAIL, "name": "MicroIntern Team"},
                 "to": [{"email": email}],
                 "subject": "Diagnostic Brevo Test",
                 "htmlContent": "If you are reading this, your Brevo integration is working perfectly!"
@@ -206,6 +207,7 @@ def debug_brevo_status():
     return jsonify({
         "BREVO_API_KEY_status": key_status,
         "SMTP_USER_configured": SMTP_USER,
+        "SENDER_EMAIL_configured": SENDER_EMAIL,
         "api_response": api_response
     })
 
