@@ -68,6 +68,50 @@ def init_admin():
         cur.close()
         conn.close()
 
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+
+def send_email(to_email, subject, body_text):
+    # Try sending via Brevo API if key is available
+    if BREVO_API_KEY:
+        try:
+            import requests
+            url = "https://api.brevo.com/v3/smtp/email"
+            headers = {
+                "accept": "application/json",
+                "api-key": BREVO_API_KEY,
+                "content-type": "application/json"
+            }
+            payload = {
+                "sender": {"email": SMTP_USER, "name": "MicroIntern Team"},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "htmlContent": body_text.replace("\n", "<br>")
+            }
+            response = requests.post(url, headers=headers, json=payload, timeout=5)
+            if response.status_code in [200, 201, 202]:
+                print(f"Email sent via Brevo API to {to_email}!")
+                return True
+            else:
+                print(f"Brevo API error: {response.status_code} - {response.text}")
+        except Exception as e:
+            print(f"Brevo API failed: {e}")
+            
+    # Fallback to local SMTP
+    try:
+        msg = MIMEText(body_text)
+        msg["Subject"] = subject
+        msg["From"] = SMTP_USER
+        msg["To"] = to_email
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        print(f"Email sent via SMTP fallback to {to_email}!")
+        return True
+    except Exception as e:
+        print(f"SMTP fallback failed: {e}")
+        return False
+
 def send_notification_emails(task_title, company_name):
     try:
         conn = get_db_connection()
@@ -83,94 +127,39 @@ def send_notification_emails(task_title, company_name):
         subject = f"New Internship Alert: {task_title}"
         body = f"Hi there!\n\n{company_name} has just posted a new task: {task_title}.\n\nLog in to the Micro Internship Marketplace to apply now!\n\nBest Regards,\nMicroIntern Team"
 
-        # Note: Sending unique messages to each student
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            for email in student_emails:
-                msg = MIMEText(body)
-                msg["Subject"] = subject
-                msg["From"] = SMTP_USER
-                msg["To"] = email
-                server.send_message(msg)
-        print("Emails sent successfully!")
+        for email in student_emails:
+            send_email(email, subject, body)
+        print("Alert emails processed.")
     except Exception as e:
-        print(f"Failed to send emails: {e}")
+        print(f"Failed to process alerts: {e}")
 
 def send_application_email(recruiter_email, student_name, task_title):
-    try:
-        subject = f"New Applicant for {task_title}"
-        body = f"Hi!\n\n{student_name} has just applied for your task: {task_title}.\n\nLog in to your dashboard to review their application!\n\nBest,\nMicroIntern Team"
-
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = SMTP_USER
-        msg["To"] = recruiter_email
-
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        print("Application email sent to recruiter!")
-    except Exception as e:
-        print(f"Failed to send application email: {e}")
+    subject = f"New Applicant for {task_title}"
+    body = f"Hi!\n\n{student_name} has just applied for your task: {task_title}.\n\nLog in to your dashboard to review their application!\n\nBest,\nMicroIntern Team"
+    send_email(recruiter_email, subject, body)
 
 def send_acceptance_email(student_email, student_name, task_title):
-    try:
-        subject = f"Application Accepted: {task_title}"
-        body = f"Congratulations {student_name}!\n\nYour application for the task '{task_title}' has been accepted.\n\nYou can now start working on the task. Check your dashboard for more details.\n\nBest regards,\nMicroIntern Team"
-
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = SMTP_USER
-        msg["To"] = student_email
-
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        print(f"Acceptance email sent to {student_email}!")
-    except Exception as e:
-        print(f"Failed to send acceptance email: {e}")
+    subject = f"Application Accepted: {task_title}"
+    body = f"Congratulations {student_name}!\n\nYour application for the task '{task_title}' has been accepted.\n\nYou can now start working on the task. Check your dashboard for more details.\n\nBest regards,\nMicroIntern Team"
+    send_email(student_email, subject, body)
 
 def send_completion_email(student_email, student_name, task_title, amount):
-    try:
-        subject = f"Payment Received: {task_title}"
-        body = f"Hi {student_name}!\n\nGreat job! Your work for '{task_title}' has been approved.\n\n₹{amount} has been credited to your wallet.\n\nYou can withdraw this amount or use it on the platform.\n\nKeep up the great work!\n\nBest regards,\nMicroIntern Team"
-
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = SMTP_USER
-        msg["To"] = student_email
-
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        print(f"Completion email sent to {student_email}!")
-    except Exception as e:
-        print(f"Failed to send completion email: {e}")
+    subject = f"Payment Received: {task_title}"
+    body = f"Hi {student_name}!\n\nGreat job! Your work for '{task_title}' has been approved.\n\n₹{amount} has been credited to your wallet.\n\nYou can withdraw this amount or use it on the platform.\n\nKeep up the great work!\n\nBest regards,\nMicroIntern Team"
+    send_email(student_email, subject, body)
 
 def send_reset_password_email(user_email, token):
+    subject = "Password Reset Request"
+    # Try to detect request origin, fallback to vercel production link
+    origin = "https://microintern-frontend-flame.vercel.app"
     try:
-        subject = "Password Reset Request"
-        # Frontend URL for reset password
-        reset_link = f"http://localhost:5173/reset-password?token={token}"
-        
-        body = f"Hi!\n\nYou requested a password reset for your Micro Internship Marketplace account.\n\nPlease click the link below to reset your password. This link will expire in 1 hour:\n\n{reset_link}\n\nIf you didn't request this, you can safely ignore this email.\n\nBest,\nMicroIntern Team"
-
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = SMTP_USER
-        msg["To"] = user_email
-
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        print(f"Reset email sent to {user_email}!")
-    except Exception as e:
-        print(f"Failed to send reset email: {e}")
+        if request.headers.get("Origin"):
+            origin = request.headers.get("Origin")
+    except Exception:
+        pass
+    reset_link = f"{origin}/reset-password?token={token}"
+    body = f"Hi!\n\nYou requested a password reset for your Micro Internship Marketplace account.\n\nPlease click the link below to reset your password. This link will expire in 1 hour:\n\n{reset_link}\n\nIf you didn't request this, you can safely ignore this email.\n\nBest,\nMicroIntern Team"
+    send_email(user_email, subject, body)
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
@@ -562,16 +551,7 @@ def invite_student(student_id):
             subject = f"Interview Invitation from {company_name}"
             body = f"Hi!\n\n{company_name} is impressed with your profile and would like to invite you for an interview.\n\nPlease reply to this email to coordinate a time.\n\nBest,\nMicroIntern Team"
             
-            msg = MIMEText(body)
-            msg["Subject"] = subject
-            msg["From"] = SMTP_USER
-            msg["To"] = student["email"]
-            
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
-                server.starttls()
-                server.login(SMTP_USER, SMTP_PASS)
-                server.send_message(msg)
-                
+            send_email(student["email"], subject, body)
             return jsonify({"message": "Invitation sent successfully"})
         return jsonify({"message": "Student not found"}), 404
     except Exception as e:
