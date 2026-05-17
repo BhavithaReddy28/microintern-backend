@@ -25,13 +25,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-@app.route('/debug/uploads')
-def debug_uploads():
-    try:
-        return jsonify(os.listdir(app.config['UPLOAD_FOLDER']))
-    except Exception as e:
-        return jsonify({"error": str(e)})
-
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
