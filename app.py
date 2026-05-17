@@ -936,6 +936,11 @@ def get_admin_stats():
     try:
         cur.execute("SELECT * FROM platform_stats WHERE id = 1")
         stats = cur.fetchone()
+        if not stats:
+            cur.execute("INSERT INTO platform_stats (id, total_fees, total_gst, total_escrow) VALUES (1, 0, 0, 0) ON CONFLICT (id) DO NOTHING")
+            conn.commit()
+            cur.execute("SELECT * FROM platform_stats WHERE id = 1")
+            stats = cur.fetchone()
         
         cur.execute("SELECT COUNT(*) FROM students")
         stats["student_count"] = cur.fetchone()["count"]
