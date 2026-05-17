@@ -84,7 +84,7 @@ def send_notification_emails(task_title, company_name):
         body = f"Hi there!\n\n{company_name} has just posted a new task: {task_title}.\n\nLog in to the Micro Internship Marketplace to apply now!\n\nBest Regards,\nMicroIntern Team"
 
         # Note: Sending unique messages to each student
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             for email in student_emails:
@@ -107,7 +107,7 @@ def send_application_email(recruiter_email, student_name, task_title):
         msg["From"] = SMTP_USER
         msg["To"] = recruiter_email
 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
@@ -125,7 +125,7 @@ def send_acceptance_email(student_email, student_name, task_title):
         msg["From"] = SMTP_USER
         msg["To"] = student_email
 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
@@ -143,7 +143,7 @@ def send_completion_email(student_email, student_name, task_title, amount):
         msg["From"] = SMTP_USER
         msg["To"] = student_email
 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
@@ -164,7 +164,7 @@ def send_reset_password_email(user_email, token):
         msg["From"] = SMTP_USER
         msg["To"] = user_email
 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
@@ -567,7 +567,7 @@ def invite_student(student_id):
             msg["From"] = SMTP_USER
             msg["To"] = student["email"]
             
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=5) as server:
                 server.starttls()
                 server.login(SMTP_USER, SMTP_PASS)
                 server.send_message(msg)
