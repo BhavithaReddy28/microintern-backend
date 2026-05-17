@@ -39,12 +39,12 @@ def upload_file():
     file_url = f"{request.host_url}uploads/{filename}"
     return jsonify({"url": file_url})
 
-# Razorpay Configuration
-RAZORPAY_KEY_ID = "rzp_test_SmKrPvIIVOi39k"
-RAZORPAY_KEY_SECRET = "5yxv0i7tCOLqRRRaYKcQSDZW"
-client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
-
 import os
+
+# Razorpay Configuration
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_SmKrPvIIVOi39k")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "5yxv0i7tCOLqRRRaYKcQSDZW")
+client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 # We use an environment variable for the live database URL, defaulting to local if it doesn't exist
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://postgres:2810@localhost:5433/microinternDB')
 
@@ -440,6 +440,10 @@ def get_transactions(user_id):
 def topup_wallet():
     # This was the old simulated topup, now we use Razorpay
     pass
+
+@app.route("/payment/config", methods=["GET"])
+def get_payment_config():
+    return jsonify({"razorpay_key_id": RAZORPAY_KEY_ID})
 
 @app.route("/payment/create-order", methods=["POST"])
 def create_order():
