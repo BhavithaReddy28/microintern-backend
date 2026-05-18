@@ -62,8 +62,20 @@ def init_admin():
         pw_hash = generate_password_hash("admin123", method="pbkdf2:sha256")
         cur.execute("INSERT INTO users (email, password_hash, role) VALUES (%s, %s, 'admin') ON CONFLICT (email) DO NOTHING", 
                    ("admin@marketplace.com", pw_hash))
+        
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+                amount NUMERIC NOT NULL,
+                method VARCHAR(50) NOT NULL,
+                details JSONB NOT NULL,
+                status VARCHAR(50) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
-        return "Admin initialized"
+        return "Admin initialized and withdrawal_requests table prepared"
     finally:
         cur.close()
         conn.close()
@@ -1013,37 +1025,144 @@ def get_admin_stats():
 
 @app.route("/wallet/withdraw", methods=["POST"])
 def withdraw_funds():
+    import json
     data = request.json
     user_id = data.get("user_id")
     amount = float(data.get("amount"))
+    method = data.get("method") # 'UPI', 'Bank', or 'Card'
+    details = data.get("details", {})
     
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT role FROM users WHERE user_id = %s", (user_id,))
-        user_role = cur.fetchone()[0]
+        cur.execute("SELECT role, email FROM users WHERE user_id = %s", (user_id,))
+        user_info = cur.fetchone()
+        user_role = user_info[0]
+        user_email = user_info[1]
         
+        student_name = "User"
         if user_role == "student":
-            cur.execute("SELECT balance FROM students WHERE user_id = %s", (user_id,))
+            cur.execute("SELECT balance, first_name, last_name FROM students WHERE user_id = %s", (user_id,))
+            student_info = cur.fetchone()
+            current_balance = float(student_info[0])
+            student_name = f"{student_info[1]} {student_info[2]}"
         else:
             cur.execute("SELECT balance FROM companies WHERE user_id = %s", (user_id,))
+            current_balance = float(cur.fetchone()[0])
             
-        current_balance = float(cur.fetchone()[0])
         if current_balance < amount:
             return jsonify({"message": "Insufficient balance"}), 400
             
+        # Deduct balance
         if user_role == "student":
             cur.execute("UPDATE students SET balance = balance - %s WHERE user_id = %s", (amount, user_id))
         else:
             cur.execute("UPDATE companies SET balance = balance - %s WHERE user_id = %s", (amount, user_id))
             
-        cur.execute("INSERT INTO transactions (user_id, amount, type, description) VALUES (%s, %s, 'debit', 'Withdrawal to Bank Account')", 
-                   (user_id, amount))
+        # Log Transaction
+        cur.execute("INSERT INTO transactions (user_id, amount, type, description) VALUES (%s, %s, 'debit', %s)", 
+                   (user_id, amount, f"Withdrawal requested via {method}"))
+                   
+        # Log Withdrawal Request
+        cur.execute("""
+            INSERT INTO withdrawal_requests (user_id, amount, method, details, status)
+            VALUES (%s, %s, %s, %s, 'pending')
+        """, (user_id, amount, method, json.dumps(details)))
+        
+        # Log Notification for Admin
+        admin_message = f"Student {student_name} ({user_email}) has requested a withdrawal of ₹{amount:.2f} via {method}. Details: {json.dumps(details)}"
+        cur.execute("""
+            INSERT INTO notifications (user_id, title, message, type)
+            VALUES (1, 'New Withdrawal Request', %s, 'info')
+        """, (admin_message,))
+        
+        # Send Email Alert to Admin
+        admin_email = "bl.en.u4cse23255@bl.students.amrita.edu"
+        email_subject = f"🔔 Alert: New Payout Request of ₹{amount:.2f} received!"
+        email_body = f"""Hello Admin,
+
+A student has requested a new payout on the Micro Internship Marketplace:
+
+---------------------------------------------------
+Student Name: {student_name}
+Email Address: {user_email}
+Requested Payout Amount: ₹{amount:.2f}
+Payout Method selected: {method}
+---------------------------------------------------
+
+📋 TRANSFER DETAILS SPECIFIED BY THE STUDENT:
+{json.dumps(details, indent=4)}
+
+Please log into your Admin Portal under the "Withdrawals" tab to copy their payment details, transfer the funds, and click "Approve & Mark as Paid".
+
+Best Regards,
+MicroIntern Automated Gateway System"""
+        
+        try:
+            send_email(admin_email, email_subject, email_body)
+        except Exception as mail_err:
+            print("Failed to send admin email alert:", mail_err)
+            
         conn.commit()
         return jsonify({"message": "Withdrawal processed successfully"})
     except Exception as e:
         conn.rollback()
         return jsonify({"message": "Withdrawal failed", "error": str(e)}), 400
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route("/admin/withdrawal-requests", methods=["GET"])
+def get_withdrawal_requests():
+    from psycopg2.extras import RealDictCursor
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT wr.*, u.email, s.first_name, s.last_name 
+            FROM withdrawal_requests wr
+            JOIN users u ON wr.user_id = u.user_id
+            LEFT JOIN students s ON wr.user_id = s.user_id
+            WHERE wr.status = 'pending'
+            ORDER BY wr.created_at DESC
+        """)
+        requests = cur.fetchall()
+        for r in requests:
+            r["amount"] = float(r["amount"])
+            if isinstance(r["details"], str):
+                import json
+                r["details"] = json.loads(r["details"])
+        return jsonify(requests)
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route("/admin/withdrawal-requests/<int:request_id>/approve", methods=["POST"])
+def approve_withdrawal(request_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT user_id, amount, method FROM withdrawal_requests WHERE id = %s", (request_id,))
+        req_info = cur.fetchone()
+        if not req_info:
+            return jsonify({"message": "Request not found"}), 404
+        
+        user_id, amount, method = req_info
+        
+        # Mark approved
+        cur.execute("UPDATE withdrawal_requests SET status = 'approved' WHERE id = %s", (request_id,))
+        
+        # Notify student
+        cur.execute("""
+            INSERT INTO notifications (user_id, title, message, type)
+            VALUES (%s, 'Withdrawal Approved', %s, 'success')
+        """, (user_id, f"Your withdrawal of ₹{float(amount):.2f} via {method} has been approved and processed! Funds should reflect in your account shortly."))
+        
+        conn.commit()
+        return jsonify({"message": "Withdrawal approved and completed!"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": str(e)}), 500
     finally:
         cur.close()
         conn.close()
