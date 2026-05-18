@@ -89,6 +89,20 @@ SMTP_PORT = 587
 SMTP_USER = "bl.en.u4cse23255@bl.students.amrita.edu"     # USER: Replace with your actual email
 SMTP_PASS = "Bhavitha@28"         # USER: Replace with your app password
 
+@app.route("/admin/cleanup-demo", methods=["GET"])
+def cleanup_demo():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM students WHERE email IN ('b23ds010@kitsw.ac.in', 'bl.en.u4cse23020@bl.students.amrita.edu')")
+        cur.execute("DELETE FROM users WHERE email IN ('b23ds010@kitsw.ac.in', 'bl.en.u4cse23020@bl.students.amrita.edu')")
+        conn.commit()
+        cur.close()
+        conn.close()
+        return "Cleanup successful!"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
 @app.route("/admin/init", methods=["GET"])
 def init_admin():
     conn = get_db_connection()
