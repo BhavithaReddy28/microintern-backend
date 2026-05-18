@@ -950,11 +950,72 @@ def verify_student():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Fetch student and user details
+        cur.execute("""
+            SELECT u.email, u.user_id, s.first_name 
+            FROM students s 
+            JOIN users u ON s.user_id = u.user_id 
+            WHERE s.student_id = %s
+        """, (student_id,))
+        student_data = cur.fetchone()
+        
+        if not student_data:
+            return jsonify({"message": "Student not found"}), 404
+            
+        user_email, user_id, first_name = student_data
+        
         cur.execute("""
             UPDATE students 
             SET verification_status = %s, rejection_reason = %s 
             WHERE student_id = %s
         """, (status, reason, student_id))
+        
+        # Add notifications and send email
+        if status == 'approved':
+            cur.execute("""
+                INSERT INTO notifications (user_id, title, message, type)
+                VALUES (%s, 'Verification Approved!', 'Congratulations! Your student account has been verified. You can now apply for Micro Internships.', 'success')
+            """, (user_id,))
+            
+            email_subject = "🎉 Your MicroIntern Account is Verified!"
+            email_body = f"""Hi {first_name},
+
+Great news! Your student profile has been successfully verified by our admin team.
+
+You now have full access to apply for Micro Internships, earn money, and build your resume!
+
+Log in now to start browsing available tasks:
+https://microintern-frontend-flame.vercel.app/
+
+Best regards,
+MicroIntern Team"""
+            try:
+                send_email(user_email, email_subject, email_body)
+            except Exception as e:
+                print(f"Failed to send verification email: {e}")
+                
+        elif status == 'rejected':
+            cur.execute("""
+                INSERT INTO notifications (user_id, title, message, type)
+                VALUES (%s, 'Verification Rejected', %s, 'error')
+            """, (user_id, f"Your verification was rejected. Reason: {reason}"))
+            
+            email_subject = "Action Required: MicroIntern Verification Update"
+            email_body = f"""Hi {first_name},
+
+We reviewed your student profile verification request, but unfortunately, we could not approve it at this time.
+
+Reason for rejection: {reason}
+
+Please log in to your dashboard to update your profile and re-submit your verification details.
+
+Best regards,
+MicroIntern Team"""
+            try:
+                send_email(user_email, email_subject, email_body)
+            except Exception as e:
+                print(f"Failed to send rejection email: {e}")
+                
         conn.commit()
         return jsonify({"message": f"Student {status}"})
     except Exception as e:
