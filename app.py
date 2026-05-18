@@ -1099,6 +1099,34 @@ def get_admin_stats():
         cur.close()
         conn.close()
 
+@app.route("/admin/transactions", methods=["GET"])
+def get_admin_transactions():
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT t.*, u.email, u.role, s.first_name as s_first, s.last_name as s_last, c.company_name
+            FROM transactions t
+            JOIN users u ON t.user_id = u.user_id
+            LEFT JOIN students s ON t.user_id = s.user_id
+            LEFT JOIN companies c ON t.user_id = c.user_id
+            ORDER BY t.created_at DESC
+            LIMIT 20
+        """)
+        txs = cur.fetchall()
+        for tx in txs:
+            tx["amount"] = float(tx["amount"]) if tx["amount"] is not None else 0.0
+            if tx["role"] == "student" and tx["s_first"]:
+                tx["display_name"] = f"Student {tx['s_first']} {tx['s_last']}"
+            elif tx["role"] == "company" and tx["company_name"]:
+                tx["display_name"] = f"Recruiter ({tx['company_name']})"
+            else:
+                tx["display_name"] = tx["email"]
+        return jsonify(txs)
+    finally:
+        cur.close()
+        conn.close()
+
 @app.route("/wallet/withdraw", methods=["POST"])
 def withdraw_funds():
     import json
