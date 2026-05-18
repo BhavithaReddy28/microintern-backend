@@ -498,6 +498,36 @@ def verify_payment():
     except Exception as e:
         return jsonify({"message": "Payment verification failed", "error": str(e)}), 400
 
+@app.route("/payment/custom-credit", methods=["POST"])
+def custom_credit_wallet():
+    data = request.json
+    user_id = data.get("user_id")
+    amount = float(data.get("amount"))
+    method = data.get("method", "UPI QR Code")
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("SELECT role FROM users WHERE user_id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+            
+        if user[0] == "student":
+            cur.execute("UPDATE students SET balance = balance + %s WHERE user_id = %s", (amount, user_id))
+        else:
+            cur.execute("UPDATE companies SET balance = balance + %s WHERE user_id = %s", (amount, user_id))
+            
+        cur.execute("INSERT INTO transactions (user_id, amount, type, description) VALUES (%s, %s, 'credit', %s)", 
+                   (user_id, amount, f"{method} Wallet Top-up"))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"message": "Wallet topped up successfully!"})
+    except Exception as e:
+        return jsonify({"message": "Failed to top up wallet", "error": str(e)}), 400
+
 @app.route("/tasks", methods=["POST"])
 def create_task():
     data = request.json
