@@ -823,6 +823,15 @@ def update_application_status(app_id):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        cur.execute("SELECT status FROM task_applications WHERE application_id = %s", (app_id,))
+        current_status = cur.fetchone()
+        
+        if not current_status:
+            return jsonify({"message": "Application not found"}), 404
+            
+        if current_status[0] == status:
+            return jsonify({"message": f"Application is already {status}"}), 400
+
         cur.execute(
             "UPDATE task_applications SET status = %s WHERE application_id = %s",
             (status, app_id)
