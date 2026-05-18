@@ -1105,6 +1105,19 @@ def withdraw_funds():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Ensure withdrawal_requests table exists in live database
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+                amount NUMERIC NOT NULL,
+                method VARCHAR(50) NOT NULL,
+                details JSONB NOT NULL,
+                status VARCHAR(50) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         cur.execute("SELECT role, email FROM users WHERE user_id = %s", (user_id,))
         user_info = cur.fetchone()
         user_role = user_info[0]
@@ -1139,12 +1152,16 @@ def withdraw_funds():
             VALUES (%s, %s, %s, %s, 'pending')
         """, (user_id, amount, method, json.dumps(details)))
         
-        # Log Notification for Admin
+        # Log Notification for Admin dynamically
+        cur.execute("SELECT user_id FROM users WHERE role = 'admin' LIMIT 1")
+        admin_res = cur.fetchone()
+        admin_user_id = admin_res[0] if admin_res else user_id
+        
         admin_message = f"Student {student_name} ({user_email}) has requested a withdrawal of ₹{amount:.2f} via {method}. Details: {json.dumps(details)}"
         cur.execute("""
             INSERT INTO notifications (user_id, title, message, type)
-            VALUES (1, 'New Withdrawal Request', %s, 'info')
-        """, (admin_message,))
+            VALUES (%s, 'New Withdrawal Request', %s, 'info')
+        """, (admin_user_id, admin_message))
         
         # Send Email Alert to Admin
         admin_email = "bl.en.u4cse23255@bl.students.amrita.edu"
