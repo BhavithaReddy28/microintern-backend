@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -23,7 +23,22 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], filename)):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT file_data, mimetype FROM stored_files WHERE filename = %s", (filename,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return Response(bytes(row[0]), mimetype=row[1])
+    except Exception as e:
+        print("Database fetch error:", e)
+    
+    return jsonify({"message": "File not found"}), 404
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -34,8 +49,28 @@ def upload_file():
         return jsonify({"message": "No selected file"}), 400
     
     filename = secure_filename(file.filename)
-    filename = f"{int(time.time())}_{filename}"
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+    filename = f"db_{int(time.time())}_{filename}"
+    file_bytes = file.read()
+    mimetype = file.mimetype
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS stored_files (filename TEXT PRIMARY KEY, file_data BYTEA, mimetype TEXT)")
+        cur.execute("INSERT INTO stored_files (filename, file_data, mimetype) VALUES (%s, %s, %s)", 
+                    (filename, psycopg2.Binary(file_bytes), mimetype))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("Database store error:", e)
+    
+    try:
+        with open(os.path.join(app.config['UPLOAD_FOLDER'], filename), 'wb') as f:
+            f.write(file_bytes)
+    except Exception as e:
+        print("Local file save error:", e)
+        
     file_url = f"{request.host_url}uploads/{filename}"
     return jsonify({"url": file_url})
 
