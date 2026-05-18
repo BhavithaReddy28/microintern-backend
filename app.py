@@ -605,7 +605,10 @@ def get_all_students():
     cur = conn.cursor(cursor_factory=RealDictCursor)
     try:
         cur.execute("""
-            SELECT s.*, u.email 
+            SELECT s.*, u.email,
+                (SELECT COUNT(*) FROM task_applications a JOIN tasks t ON a.task_id = t.task_id WHERE a.student_id = s.student_id AND a.status = 'completed' AND t.level = 'Easy') as easy_tasks_count,
+                (SELECT COUNT(*) FROM task_applications a JOIN tasks t ON a.task_id = t.task_id WHERE a.student_id = s.student_id AND a.status = 'completed' AND t.level = 'Medium') as medium_tasks_count,
+                (SELECT COUNT(*) FROM task_applications a JOIN tasks t ON a.task_id = t.task_id WHERE a.student_id = s.student_id AND a.status = 'completed' AND t.level = 'Hard') as hard_tasks_count
             FROM students s
             JOIN users u ON s.user_id = u.user_id
             ORDER BY s.hireable DESC, s.rating DESC
