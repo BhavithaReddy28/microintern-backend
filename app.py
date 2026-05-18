@@ -723,6 +723,63 @@ def get_task(task_id):
         cur.close()
         conn.close()
 
+@app.route("/tasks/<int:task_id>", methods=["PUT"])
+def update_task(task_id):
+    data = request.json
+    new_payment = data.get("payment")
+    new_task_link = data.get("task_link")
+
+    if new_payment is None:
+        return jsonify({"message": "Payment is required"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT payment, company_id, task_name FROM tasks WHERE task_id = %s", (task_id,))
+        task_info = cur.fetchone()
+        if not task_info:
+            return jsonify({"message": "Task not found"}), 404
+
+        old_payment = float(task_info[0])
+        company_id = task_info[1]
+        task_name = task_info[2]
+
+        new_base = float(new_payment)
+        diff_base = new_base - old_payment
+        diff_total = diff_base + (diff_base * 0.05) + (diff_base * 0.18)
+
+        cur.execute("SELECT balance, user_id FROM companies WHERE company_id = %s", (company_id,))
+        company_info = cur.fetchone()
+        if not company_info:
+            return jsonify({"message": "Company not found"}), 404
+
+        company_balance = float(company_info[0])
+        user_id = company_info[1]
+
+        if diff_total > 0:
+            if company_balance < diff_total:
+                return jsonify({"message": f"Insufficient balance to increase payment. You need ₹{diff_total:.2f} more in your wallet."}), 400
+            cur.execute("UPDATE companies SET balance = balance - %s WHERE company_id = %s", (diff_total, company_id))
+            cur.execute("INSERT INTO transactions (user_id, amount, type, description) VALUES (%s, %s, 'debit', %s)",
+                       (user_id, diff_total, f"Payment increase locked for task: {task_name} (Incl. Fees & GST)"))
+            cur.execute("UPDATE platform_stats SET total_escrow = total_escrow + %s WHERE id = 1", (diff_total,))
+        elif diff_total < 0:
+            refund_amount = abs(diff_total)
+            cur.execute("UPDATE companies SET balance = balance + %s WHERE company_id = %s", (refund_amount, company_id))
+            cur.execute("INSERT INTO transactions (user_id, amount, type, description) VALUES (%s, %s, 'credit', %s)",
+                       (user_id, refund_amount, f"Refund for payment reduction on task: {task_name} (Incl. Fees & GST)"))
+            cur.execute("UPDATE platform_stats SET total_escrow = total_escrow - %s WHERE id = 1", (refund_amount,))
+
+        cur.execute("UPDATE tasks SET payment = %s, task_link = %s WHERE task_id = %s", (new_base, new_task_link, task_id))
+        conn.commit()
+        return jsonify({"message": "Task updated successfully"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": "Failed to update task", "error": str(e)}), 400
+    finally:
+        cur.close()
+        conn.close()
+
 @app.route("/company/<int:company_id>/tasks", methods=["GET"])
 def get_company_tasks(company_id):
     conn = get_db_connection()
