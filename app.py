@@ -1088,6 +1088,12 @@ def get_admin_stats():
         stats["total_gst"] = float(stats["total_gst"])
         stats["total_escrow"] = float(stats["total_escrow"])
         
+        # Safeguard: If total_escrow became negative due to old duplicate test clicks, reset it to 0
+        if stats["total_escrow"] < 0:
+            cur.execute("UPDATE platform_stats SET total_escrow = 0 WHERE id = 1")
+            conn.commit()
+            stats["total_escrow"] = 0.0
+        
         return jsonify(stats)
     finally:
         cur.close()
