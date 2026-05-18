@@ -94,7 +94,7 @@ def cleanup_demo():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("DELETE FROM students WHERE email IN ('b23ds010@kitsw.ac.in', 'bl.en.u4cse23020@bl.students.amrita.edu')")
+        cur.execute("DELETE FROM students WHERE user_id IN (SELECT user_id FROM users WHERE email IN ('b23ds010@kitsw.ac.in', 'bl.en.u4cse23020@bl.students.amrita.edu'))")
         cur.execute("DELETE FROM users WHERE email IN ('b23ds010@kitsw.ac.in', 'bl.en.u4cse23020@bl.students.amrita.edu')")
         conn.commit()
         cur.close()
